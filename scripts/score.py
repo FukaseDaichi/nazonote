@@ -19,7 +19,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = os.path.join(ROOT, "state")
 
 # --- 設定 ---
-TOP_N = 15
+TOP_N = 25  # AI選抜に渡す候補プール（この中から AI が10本を選ぶ）
 W_RECENCY = 2.0
 W_LIKE = 0.5
 TITLE_FACTOR = 0.5
@@ -80,7 +80,7 @@ def main():
             "url": c["url"],
             "hashtags": c.get("hashtags") or [],
             "description": c.get("description", ""),
-            "body_excerpt": c.get("body_excerpt", ""),
+            "body_excerpt": (c.get("body_excerpt", "") or "")[:600],
         }
         for c in cands
         if c["summarize"]

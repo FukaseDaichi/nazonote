@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""candidates.json (+ あれば summaries.json) から日次 Markdown を生成する。
+"""candidates.json (+ あれば summaries.json) から2つの Markdown を生成する。
 
-- daily/YYYY-MM-DD.md を出力
-- 各記事行に隠しマーカー <!-- key=... tags=... --> を埋め込む（学習用）
-- 出力した key を seen.json に追記（重複防止）
-- 通知用の1行を state/notify.txt に書く
-summaries.json が無い/壊れていても、note原文の概要で問題なく動く（耐障害）。
+1) daily/YYYY-MM-DD-osusume.md … AI選抜「おすすめ謎解き TOP10」記事（読む用）
+2) daily/YYYY-MM-DD.md          … 全件のスコア順チェックリスト（学習用フィードバック面）
+
+両方の各記事行に隠しマーカー <!-- key=... tags=... --> を埋める（learn.py が拾う）。
+summaries.json が無い/壊れている場合は、TOP10 を **スコア順** で暫定生成する（耐障害）。
 """
 import json
 import os
@@ -24,73 +24,98 @@ def load(p, d):
         return d
 
 
-def tags_inline(c):
-    return " ".join("#" + t for t in (c.get("hashtags") or [])[:6])
+def tags_inline(c, n=6):
+    return " ".join("#" + t for t in (c.get("hashtags") or [])[:n])
 
 
 def tags_marker(c):
     return ",".join(c.get("hashtags") or [])
 
 
+def meta_line(c):
+    s = f"@{c.get('user', '')} · ❤{c.get('like_count', 0)} · {(c.get('publish_at') or '')[:16]}"
+    ti = tags_inline(c)
+    return s + (f" · {ti}" if ti else "")
+
+
 def main():
     cands = load(os.path.join(STATE, "candidates.json"), [])
     summ = load(os.path.join(STATE, "summaries.json"), {}) or {}
-    arts = summ.get("articles") or {}
+    by_key = {c["key"]: c for c in cands}
     today = datetime.datetime.now(JST).strftime("%Y-%m-%d")
 
-    top = [c for c in cands if c.get("summarize")]
-    rest = [c for c in cands if not c.get("summarize")]
+    lead = summ.get("lead") or summ.get("daily_summary") or ""
+    ranking = summ.get("ranking") or []
+    ai_picked = bool(ranking)
 
-    L = []
-    L.append(f"# 謎解き note 収集 — {today}\n")
-    L.append(f"収集 **{len(cands)}** 件（注目 {len(top)} 件＋その他 {len(rest)} 件）\n")
+    # フォールバック: AI選抜が無ければスコア上位10件で暫定ランキング
+    if not ai_picked:
+        ranking = [
+            {
+                "rank": i + 1,
+                "key": c["key"],
+                "description": c.get("description", ""),
+                "reason": "",
+            }
+            for i, c in enumerate(cands[:10])
+        ]
 
-    if summ.get("daily_summary"):
-        L.append("## 本日のまとめ\n")
-        L.append(summ["daily_summary"] + "\n")
+    picked = {}  # key -> rank（コレクション md の ★バッジ用）
 
-    pick = summ.get("pick") or {}
-    if pick.get("key"):
-        pc = next((c for c in cands if c["key"] == pick["key"]), None)
-        if pc:
-            L.append("## まず読む1本\n")
-            L.append(f"**[{pc['title']}]({pc['url']})** — {pick.get('reason', '')}\n")
+    # ---------- 1) おすすめ TOP10 記事 ----------
+    A = []
+    A.append(f"# 🧩 今日のおすすめ謎解き note TOP10 — {today}\n")
+    if lead:
+        A.append(lead + "\n")
+    if ai_picked:
+        A.append("> AI が本日の候補から選抜・要約。気になった記事は `- [ ]` を `- [x]` に。\n")
+    else:
+        A.append("> ⚠️ AI未選抜（スコア順の暫定版）。`claude setup-token` 後に本選抜が有効になります。\n")
 
-    L.append("## 注目記事\n")
-    for c in top:
-        L.append(f"### #{c['rank']} [{c['title']}]({c['url']})　·　score {c['score']}")
-        meta = f"@{c.get('user', '')} · ❤ {c.get('like_count', 0)} · {(c.get('publish_at') or '')[:16]}"
-        ti = tags_inline(c)
-        if ti:
-            meta += f" · {ti}"
-        L.append(meta)
-        a = arts.get(c["key"])
-        if a:
-            if a.get("overview"):
-                L.append(f"\n**概要**: {a['overview']}")
-            for p in (a.get("points") or []):
-                L.append(f"- {p}")
-        elif c.get("description"):
-            L.append(f"\n**概要(note原文)**: {c['description']}")
-        L.append(f"\n- [ ] 気になる <!-- key={c['key']} tags={tags_marker(c)} -->\n")
-
-    if rest:
-        L.append("## その他\n")
-        for c in rest:
-            ti = tags_inline(c)
-            suffix = (" · " + ti) if ti else ""
-            L.append(
-                f"- [ ] [{c['title']}]({c['url']}) · score {c['score']}{suffix} "
-                f"<!-- key={c['key']} tags={tags_marker(c)} -->"
-            )
-        L.append("")
+    for item in ranking:
+        key = item.get("key")
+        c = by_key.get(key)
+        if not c:
+            continue
+        rank = item.get("rank", "?")
+        picked[key] = rank
+        A.append(f"## {rank}位　[{c['title']}]({c['url']})")
+        desc = (item.get("description") or "").strip()
+        if desc:
+            A.append(f"\n{desc}")
+        reason = (item.get("reason") or "").strip()
+        if reason:
+            A.append(f"\n**おすすめ理由**: {reason}")
+        A.append(f"\n`{meta_line(c)}`")
+        A.append(f"\n- [ ] 気になる <!-- key={key} tags={tags_marker(c)} -->\n")
 
     os.makedirs(DAILY, exist_ok=True)
-    out = os.path.join(DAILY, f"{today}.md")
-    with open(out, "w", encoding="utf-8") as f:
+    osusume_path = os.path.join(DAILY, f"{today}-osusume.md")
+    with open(osusume_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(A) + "\n")
+
+    # ---------- 2) 全件チェックリスト ----------
+    L = []
+    L.append(f"# 謎解き note 収集（全{len(cands)}件） — {today}\n")
+    if lead:
+        L.append("## 本日のまとめ\n")
+        L.append(lead + "\n")
+    L.append(f"→ AI選抜おすすめTOP10: [{today}-osusume.md]({today}-osusume.md)\n")
+    L.append("## 一覧（スコア順・気になるものを [x] に）\n")
+    for c in cands:
+        badge = f" ★AI{picked[c['key']]}位" if c["key"] in picked else ""
+        ti = tags_inline(c, 5)
+        suffix = (" · " + ti) if ti else ""
+        L.append(
+            f"- [ ] [{c['title']}]({c['url']}) · score {c['score']}{badge}{suffix} "
+            f"<!-- key={c['key']} tags={tags_marker(c)} -->"
+        )
+    L.append("")
+    collection_path = os.path.join(DAILY, f"{today}.md")
+    with open(collection_path, "w", encoding="utf-8") as f:
         f.write("\n".join(L) + "\n")
 
-    # seen.json 更新
+    # ---------- seen.json 更新 ----------
     seenp = os.path.join(STATE, "seen.json")
     seen = set(load(seenp, []))
     for c in cands:
@@ -98,12 +123,16 @@ def main():
     with open(seenp, "w", encoding="utf-8") as f:
         json.dump(sorted(seen), f, ensure_ascii=False, indent=0)
 
-    # 通知文
-    notable = (top[0]["title"] if top else (cands[0]["title"] if cands else "なし"))[:30]
+    # ---------- 通知文 ----------
+    top1 = next((by_key[i["key"]]["title"] for i in ranking if i.get("key") in by_key), "なし")
+    tag = "おすすめ1位" if ai_picked else "暫定1位"
     with open(os.path.join(STATE, "notify.txt"), "w", encoding="utf-8") as f:
-        f.write(f"本日 {len(cands)}件 / 注目: {notable}")
+        f.write(f"本日 {len(cands)}件 / {tag}: {top1[:28]}")
 
-    print(f"wrote {out} ({len(cands)} articles, {len(arts)} summarized)")
+    print(
+        f"wrote {os.path.basename(osusume_path)} (TOP{len(picked)}, "
+        f"{'AI選抜' if ai_picked else 'スコア順'}) + {os.path.basename(collection_path)} ({len(cands)}件)"
+    )
 
 
 if __name__ == "__main__":

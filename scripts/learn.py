@@ -42,7 +42,7 @@ def main():
     today = datetime.date.today()
     new = []
     for md in sorted(glob.glob(os.path.join(DAILY, "*.md"))):
-        base = os.path.basename(md)[:-3]
+        base = os.path.basename(md)[:10]  # 先頭の YYYY-MM-DD（-osusume.md も拾う）
         try:
             d = datetime.date.fromisoformat(base)
             if (today - d).days > LOOKBACK_DAYS:
