@@ -13,8 +13,14 @@ mkdir -p daily state
 # 同梱 claude バイナリを最新バージョンから自動解決（パスにバージョン番号が入るため）
 CB="$(printf '%s\n' "$HOME/Library/Application Support/Claude/claude-code"/*/claude.app/Contents/MacOS/claude 2>/dev/null | sort -V | tail -1)"
 # headless 認証トークン（初回のみ `claude setup-token` で発行→ state/.claude_token に保存）
+# 形式チェック: 正規トークン(sk-ant-...)のときだけ使う。プレースホルダ等の誤貼り付けは無視。
 if [ -f "$ROOT/state/.claude_token" ]; then
-  export CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '[:space:]' < "$ROOT/state/.claude_token")"
+  _tok="$(tr -d '[:space:]' < "$ROOT/state/.claude_token")"
+  case "$_tok" in
+    sk-ant-*) export CLAUDE_CODE_OAUTH_TOKEN="$_tok" ;;
+    *) echo "[warn] state/.claude_token が正しい形式(sk-ant-...)でないため無視（要約はスキップ）" ;;
+  esac
+  unset _tok
 fi
 
 notify() {
