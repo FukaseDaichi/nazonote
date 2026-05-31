@@ -1,0 +1,17 @@
+# 認証トークン（絶対にコミットしない）
+state/.claude_token
+
+# 実行時の中間ファイル・ログ
+state/*.log
+state/candidates_raw.json
+state/candidates.json
+state/candidates_top.json
+state/summaries.json
+state/notify.txt
+
+# 残すと有用な学習データは追跡対象（コメントアウトで除外しない）:
+#   state/weights_base.json     手調整の基本重み
+#   state/weights_learned.json  学習済み重み
+#   state/seen.json             既出キー
+#   state/feedback.jsonl        チェック履歴
+#   daily/*.md                  日次成果物
