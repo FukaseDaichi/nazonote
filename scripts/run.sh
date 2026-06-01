@@ -92,7 +92,11 @@ publish_digest() {
   # AIダイジェスト: スキル nazo-digest が全候補を評価・選抜し、フランクな記事を執筆。
   # 未ログイン/失敗時は render.py が暫定版（スコア順）で代替するので止まらない（耐障害）。
   if [ -n "$CB" ]; then
-    rm -f state/assessments.json state/selection.json
+    # 同日に再実行したとき、前回の osusume.md が残っていると render.py が「AI執筆済み」と誤判定して
+    # 古い記事のまま終わるので、毎回クリアして上書きを保証する。
+    _today_now="$(cat state/today.txt 2>/dev/null || date '+%Y-%m-%d')"
+    rm -f state/assessments.json state/selection.json "daily/${_today_now}-osusume.md"
+    unset _today_now
     # まずスラッシュ起動。これが headless で効かない環境では本文プロンプトに保険でフォールバック。
     "$CB" -p "/nazo-digest" --model sonnet --permission-mode acceptEdits \
         --allowedTools "Read,Write,Edit,Skill" || echo "[warn] /nazo-digest 呼び出しに失敗"
