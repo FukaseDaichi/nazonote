@@ -42,19 +42,22 @@ notify() {
     echo "[fatal] score.py failed"; exit 1
   fi
 
-  # 要約（claude バイナリがあれば試行）。未ログイン/失敗時は summaries.json が
-  # 作られないだけで、render は note 原文の概要で問題なく続行する（耐障害）。
+  # AIダイジェスト: スキル nazo-digest が全候補を評価・選抜し、フランクな記事を執筆。
+  # 未ログイン/失敗時は render.py が暫定版（スコア順）で代替するので止まらない（耐障害）。
   if [ -n "$CB" ]; then
-    rm -f state/summaries.json
-    if ! "$CB" -p "$(cat prompts/summarize.md)" \
-          --model sonnet \
-          --permission-mode acceptEdits \
-          --allowedTools Read,Write,Edit; then
-      echo "[warn] claude summarize failed; rendering without summaries"
+    rm -f state/assessments.json state/selection.json
+    # まずスラッシュ起動。これが headless で効かない環境では本文プロンプトに保険でフォールバック。
+    "$CB" -p "/nazo-digest" --model sonnet --permission-mode acceptEdits \
+        --allowedTools "Read,Write,Edit,Skill" || echo "[warn] /nazo-digest 呼び出しに失敗"
+    if [ ! -f state/selection.json ]; then
+      echo "[info] selection.json 未生成 → スキル本文を直接プロンプトで再試行"
+      BODY="$(awk 'c>=2{print} /^---[ \t]*$/{c++}' .claude/skills/nazo-digest/SKILL.md)"
+      "$CB" -p "$BODY" --model sonnet --permission-mode acceptEdits \
+          --allowedTools "Read,Write,Edit" || echo "[warn] スキル本文での実行も失敗"
     fi
-    [ -f state/summaries.json ] || echo "[info] no summaries.json (未ログイン等); 概要なしで描画"
+    [ -f state/selection.json ] || echo "[info] selection.json なし(未ログイン等); 暫定ダイジェストで描画"
   else
-    echo "[info] claude binary not found; rendering without AI summaries"
+    echo "[info] claude binary not found; 暫定ダイジェストで描画"
   fi
 
   if ! "$PY" scripts/render.py; then

@@ -6,7 +6,9 @@ state/*.log
 state/candidates_raw.json
 state/candidates.json
 state/candidates_top.json
-state/summaries.json
+state/assessments.json
+state/selection.json
+state/today.txt
 state/notify.txt
 
 # 残すと有用な学習データは追跡対象（コメントアウトで除外しない）:

@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""candidates_raw.json に優先度スコアを付けて並べ替える。
+"""機械的な“下ごしらえ”スコアで候補を並べ替え、AI(スキル)に渡す候補プールを用意する。
 
-score = w_recency*(新しさ)
-      + Σ_tag ( weights_base[tag] + weights_learned[tag] )   ← ハッシュタグ
-      + title_factor * Σ_kw ( タイトル中のキーワード )
-      + w_like * log1p(like_count)
+最終的な採点・選抜は AI(スキル nazo-digest) が行う。ここでのスコアはあくまで
+- ノイズを下げて候補プールを良質にするための事前ヒント
+- 学習タグ(weights_learned)を反映した“好み”の事前順位
+であり、表示上の最終順位は AI の selection が優先される。
 
 出力:
-  state/candidates.json      … 全件（rank/score/score_detail 付き、スコア降順）
-  state/candidates_top.json  … 上位 TOP_N（要約用、本文抜粋付き）
+  state/candidates.json      … 全件（mech_score/rank 付き、スコア降順）
+  state/candidates_top.json  … 上位 POOL_N 件（AIが内容確認する候補プール。本文抜粋・marker・meta付き）
+  state/today.txt            … 本日の日付(JST, YYYY-MM-DD)。スキルが出力ファイル名に使う。
 """
 import json
 import os
@@ -19,7 +20,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = os.path.join(ROOT, "state")
 
 # --- 設定 ---
-TOP_N = 25  # AI選抜に渡す候補プール（この中から AI が10本を選ぶ）
+POOL_N = 40         # AIが内容確認する候補プールの件数（全体を広く見つつトークンを抑える）
 W_RECENCY = 2.0
 W_LIKE = 0.5
 TITLE_FACTOR = 0.5
@@ -32,6 +33,16 @@ def load_json(p, default):
         return json.load(open(p, encoding="utf-8"))
     except Exception:
         return default
+
+
+def marker_of(c):
+    return f"<!-- key={c['key']} tags={','.join(c.get('hashtags') or [])} -->"
+
+
+def meta_of(c):
+    s = f"@{c.get('user', '')} · ❤{c.get('like_count', 0)} · {(c.get('publish_at') or '')[:16]}"
+    ti = " ".join("#" + t for t in (c.get("hashtags") or [])[:6])
+    return s + (f" · {ti}" if ti else "")
 
 
 def main():
@@ -58,39 +69,43 @@ def main():
             pass
         like = W_LIKE * math.log1p(c.get("like_count") or 0)
         c["score"] = round(tag_score + title_score + rec + like, 2)
-        c["score_detail"] = {
-            "tag": round(tag_score, 2),
-            "title": round(title_score, 2),
-            "recency": round(rec, 2),
-            "like": round(like, 2),
-        }
 
     cands.sort(key=lambda c: c["score"], reverse=True)
     for i, c in enumerate(cands):
         c["rank"] = i + 1
-        c["summarize"] = i < TOP_N
+        c["pool"] = i < POOL_N
 
     with open(os.path.join(STATE, "candidates.json"), "w", encoding="utf-8") as f:
         json.dump(cands, f, ensure_ascii=False, indent=2)
 
-    top = [
-        {
+    # AI候補プール（内容確認に必要な情報を全部入れる）
+    top = []
+    for c in cands:
+        if not c.get("pool"):
+            continue
+        top.append({
             "key": c["key"],
             "title": c["title"],
             "url": c["url"],
+            "user": c.get("user"),
+            "like_count": c.get("like_count", 0),
+            "publish_at": c.get("publish_at"),
             "hashtags": c.get("hashtags") or [],
             "description": c.get("description", ""),
-            "body_excerpt": (c.get("body_excerpt", "") or "")[:600],
-        }
-        for c in cands
-        if c["summarize"]
-    ]
+            "body_excerpt": (c.get("body_excerpt", "") or "")[:500],
+            "mech_score": c["score"],
+            "meta": meta_of(c),
+            "marker": marker_of(c),
+        })
     with open(os.path.join(STATE, "candidates_top.json"), "w", encoding="utf-8") as f:
         json.dump(top, f, ensure_ascii=False, indent=2)
 
-    print(f"scored {len(cands)} articles; top {len(top)} flagged for summary")
+    with open(os.path.join(STATE, "today.txt"), "w", encoding="utf-8") as f:
+        f.write(now.strftime("%Y-%m-%d"))
+
+    print(f"scored {len(cands)} articles; AI候補プール {len(top)} 件 (POOL_N={POOL_N})")
     for c in cands[:8]:
-        print(f"  #{c['rank']:>2} {c['score']:>6}  {(c['title'] or '')[:38]:38}  {c.get('hashtags', [])[:4]}")
+        print(f"  pre#{c['rank']:>2} {c['score']:>6}  {(c['title'] or '')[:36]:36}  {c.get('hashtags', [])[:3]}")
 
 
 if __name__ == "__main__":
