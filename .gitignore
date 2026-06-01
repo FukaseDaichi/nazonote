@@ -1,19 +1,14 @@
-# 認証トークン（絶対にコミットしない）
+# ローカル個人設定・秘密情報
+.claude/settings.local.json
+.env
+.env.*
+state/.env
 state/.claude_token
 
-# 実行時の中間ファイル・ログ
-state/*.log
-state/candidates_raw.json
-state/candidates.json
-state/candidates_top.json
-state/assessments.json
-state/selection.json
-state/today.txt
-state/notify.txt
+# 実行時 state・ログ・中間ファイル
+state/*
+!state/weights_base.json
 
-# 残すと有用な学習データは追跡対象（コメントアウトで除外しない）:
-#   state/weights_base.json     手調整の基本重み
-#   state/weights_learned.json  学習済み重み
-#   state/seen.json             既出キー
-#   state/feedback.jsonl        チェック履歴
-#   daily/*.md                  日次成果物
+# 公開 GitHub に載せる daily は読む用ダイジェストだけ
+daily/*.md
+!daily/*-osusume.md
