@@ -42,14 +42,9 @@ launchd(毎日8:00) → run.sh
 CLAUDE="$(ls -t "$HOME/Library/Application Support/Claude/claude-code/"*/claude.app/Contents/MacOS/claude | head -1)"
 "$CLAUDE" setup-token
 
-# 2) state/.env を作成（値は自分のものに置き換える）
-cat > ~/git/note/state/.env <<'EOF'
-CLAUDE_CODE_OAUTH_TOKEN=sk-ant-ここに貼り付け
-MOBILE_NOTIFY_ENABLED=1
-LINE_CHANNEL_ACCESS_TOKEN=ここにLINEのChannel access token
-LINE_TO_USER_ID=Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-GITHUB_DAILY_URL_TEMPLATE=https://github.com/FukaseDaichi/nazonote/blob/main/daily/{date}-osusume.md
-EOF
+# 2) state/.env を作成（サンプルをコピーして値を置き換える）
+cp ~/git/note/state/.env.example ~/git/note/state/.env
+$EDITOR ~/git/note/state/.env
 chmod 600 ~/git/note/state/.env
 
 # 3) 本番テスト（osusume.md の冒頭が「⚠️ AI未実行」でなくフランクな本文になれば成功）
