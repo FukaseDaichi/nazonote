@@ -94,9 +94,10 @@ MOBILE_NOTIFY_ENABLED=1
 LINE_CHANNEL_ACCESS_TOKEN=...
 LINE_TO_USER_ID=Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 GITHUB_DAILY_URL_TEMPLATE=https://github.com/<owner>/<repo>/blob/<branch>/daily/{date}-osusume.md
+CLAUDE_CODE_OAUTH_TOKEN=sk-ant-...
 ```
 
-`scripts/run.sh` と `scripts/line_notify.py` は、この env ファイルを読みます。必須値が欠けている場合、LINE 通知はスキップし、日次処理自体は失敗扱いにしません。
+`scripts/run.sh` と `scripts/line_notify.py` は、この env ファイルを読みます。LINE 通知の必須値が欠けている場合、LINE 通知はスキップし、日次処理自体は失敗扱いにしません。Claude token は既存の `state/.claude_token` も後方互換として読めます。
 
 ## LINE 側セットアップ
 
@@ -124,6 +125,7 @@ Phase 1 は自分宛ての `push message` 固定です。
 - LINE Messaging API の push endpoint に text message を送る
 - 送信結果を標準出力へ簡潔に出す
 - 失敗しても exit code は 0 にする
+- `MOBILE_NOTIFY_ENABLED=0` の場合は送信せずに正常終了する
 
 送信先:
 
@@ -229,9 +231,9 @@ Phase 2 で決めること:
 1. `.gitignore` に `state/.env` を追加
 2. `state/.env` のテンプレートを README または docs に記載
 3. `scripts/line_notify.py` を追加
-4. LINE Messaging API へテスト通知を送る
-5. `run.sh` に git add / commit / push を追加
-6. `run.sh` に push 成功後の LINE 通知を追加
+4. `run.sh` に git add / commit / push を追加
+5. `run.sh` に push 成功後の LINE 通知を追加
+6. LINE Messaging API へテスト通知を送る
 7. 手動で `zsh scripts/run.sh` を実行して GitHub push と LINE 通知を確認
 8. launchd 実行で翌朝も同じ流れになることを確認
 
